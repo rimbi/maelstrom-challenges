@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, Default)]
@@ -36,6 +38,18 @@ enum MessageType {
     GenerateOk {
         id: usize,
     },
+    Broadcast {
+        message: usize,
+    },
+    BroadcastOk,
+    Read,
+    ReadOk{
+        messages: Vec<usize>,
+    },
+    Topology {
+        topology: HashMap<String, Vec<String>>
+    },
+    TopologyOk,
 }
 
 #[derive(Default)]
@@ -44,6 +58,8 @@ pub struct Node {
     nodes: Vec<String>,
     msg_id: usize,
     unique_id: usize,
+    messages: Vec<usize>,
+    topology: HashMap<String, Vec<String>>,
 }
 
 impl Node {
@@ -66,6 +82,17 @@ impl Node {
             MessageType::Generate => {
                 response.body.payload = MessageType::GenerateOk { id: self.unique_id };
                 self.unique_id += self.nodes.len();
+            }
+            MessageType::Broadcast { message } => {
+                self.messages.push(message);
+                response.body.payload = MessageType::BroadcastOk;
+            }
+            MessageType::Read => {
+                response.body.payload = MessageType::ReadOk { messages: self.messages.clone() };
+            }
+            MessageType::Topology { topology } => {
+                self.topology = topology;
+                response.body.payload = MessageType::TopologyOk;
             }
             _ => unreachable!(),
         }
