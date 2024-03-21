@@ -32,6 +32,10 @@ enum MessageType {
     EchoOk {
         echo: String,
     },
+    Generate,
+    GenerateOk {
+        id: usize,
+    },
 }
 
 #[derive(Default)]
@@ -39,6 +43,7 @@ struct Node {
     id: String,
     nodes: Vec<String>,
     msg_id: usize,
+    unique_id: usize,
 }
 
 impl Node {
@@ -52,10 +57,15 @@ impl Node {
             MessageType::Init { node_id, node_ids } => {
                 self.id = node_id;
                 self.nodes = node_ids;
+                self.unique_id = self.id[1..].parse().unwrap();
                 response.body.payload = MessageType::InitOk;
             }
             MessageType::Echo { echo } => {
                 response.body.payload = MessageType::EchoOk { echo };
+            }
+            MessageType::Generate => {
+                response.body.payload = MessageType::GenerateOk { id: self.unique_id };
+                self.unique_id += self.nodes.len();
             }
             _ => unreachable!(),
         }
