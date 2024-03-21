@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, Default)]
-struct Message {
+pub struct Message {
     id: usize,
     src: String,
     dest: String,
@@ -39,7 +39,7 @@ enum MessageType {
 }
 
 #[derive(Default)]
-struct Node {
+pub struct Node {
     id: String,
     nodes: Vec<String>,
     msg_id: usize,
@@ -47,11 +47,11 @@ struct Node {
 }
 
 impl Node {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Default::default()
     }
 
-    fn handle_message(&mut self, msg: Message) -> Message {
+    pub fn handle_message(&mut self, msg: Message) -> Message {
         let mut response = Message::default();
         match msg.body.payload {
             MessageType::Init { node_id, node_ids } => {
@@ -76,16 +76,4 @@ impl Node {
         self.msg_id += 1;
         response
     }
-}
-
-fn main() -> anyhow::Result<()> {
-    let mut node = Node::new();
-    let stdin = &std::io::stdin();
-    let messages = serde_json::Deserializer::from_reader(stdin.lock()).into_iter();
-    for message in messages {
-        let response = node.handle_message(message?);
-        let response = serde_json::to_string(&response).unwrap();
-        println!("{response}");
-    }
-    Ok(())
 }
