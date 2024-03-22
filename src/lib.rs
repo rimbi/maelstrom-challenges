@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize, Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct Message {
     id: usize,
     src: String,
@@ -10,7 +10,7 @@ pub struct Message {
     body: Body,
 }
 
-#[derive(Debug, Deserialize, Serialize, Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 struct Body {
     msg_id: usize,
     in_reply_to: Option<usize>,
@@ -18,7 +18,7 @@ struct Body {
     payload: MessageType,
 }
 
-#[derive(Debug, Deserialize, Serialize, Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 enum MessageType {
@@ -43,11 +43,11 @@ enum MessageType {
     },
     BroadcastOk,
     Read,
-    ReadOk{
-        messages: Vec<usize>,
+    ReadOk {
+        messages: HashSet<usize>,
     },
     Topology {
-        topology: HashMap<String, Vec<String>>
+        topology: HashMap<String, Vec<String>>,
     },
     TopologyOk,
 }
@@ -58,8 +58,8 @@ pub struct Node {
     nodes: Vec<String>,
     msg_id: usize,
     unique_id: usize,
-    messages: Vec<usize>,
-    topology: HashMap<String, Vec<String>>,
+    messages: HashSet<usize>,
+    neighbors: Vec<String>,
 }
 
 impl Node {
@@ -67,7 +67,8 @@ impl Node {
         Default::default()
     }
 
-    pub fn handle_message(&mut self, msg: Message) -> Message {
+    pub fn handle_message(&mut self, msg: Message) -> VecDeque<Message> {
+        let mut responses = VecDeque::new();
         let mut response = Message::default();
         match msg.body.payload {
             MessageType::Init { node_id, node_ids } => {
@@ -84,23 +85,40 @@ impl Node {
                 self.unique_id += self.nodes.len();
             }
             MessageType::Broadcast { message } => {
-                self.messages.push(message);
                 response.body.payload = MessageType::BroadcastOk;
+                if !self.messages.contains(&message) {
+                    self.messages.insert(message);
+                    let mut broadcast = Message::default();
+                    broadcast.src = self.id.clone();
+                    broadcast.body.payload = MessageType::Broadcast { message };
+                    for node in &self.neighbors {
+                        if node == &msg.src || node == &self.id {
+                            continue;
+                        }
+                        broadcast.dest = node.clone();
+                        broadcast.body.msg_id = self.msg_id;
+                        self.msg_id += 1;
+                        responses.push_back(broadcast.clone());
+                    }
+                }
             }
             MessageType::Read => {
-                response.body.payload = MessageType::ReadOk { messages: self.messages.clone() };
+                response.body.payload = MessageType::ReadOk {
+                    messages: self.messages.clone(),
+                };
             }
             MessageType::Topology { topology } => {
-                self.topology = topology;
+                self.neighbors = topology.get(&self.id).cloned().unwrap_or_default();
                 response.body.payload = MessageType::TopologyOk;
             }
-            _ => unreachable!(),
+            _ => return responses,
         }
         response.src = self.id.clone();
         response.dest = msg.src;
         response.body.in_reply_to = Some(msg.body.msg_id);
         response.body.msg_id = self.msg_id;
         self.msg_id += 1;
-        response
+        responses.push_front(response);
+        responses
     }
 }
