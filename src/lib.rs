@@ -59,7 +59,7 @@ pub struct Node {
     msg_id: usize,
     unique_id: usize,
     messages: HashSet<usize>,
-    neighbors: Vec<String>,
+    neighbors: HashSet<String>,
 }
 
 impl Node {
@@ -101,14 +101,31 @@ impl Node {
                         responses.push_back(broadcast.clone());
                     }
                 }
+                if self.neighbors.contains(&msg.src) {
+                    let mut read = Message::default();
+                    read.src = self.id.clone();
+                    read.dest = msg.src.clone();
+                    read.body.payload = MessageType::Read;
+                    read.body.msg_id = self.msg_id;
+                    self.msg_id += 1;
+                    responses.push_back(read.clone());
+                }
             }
             MessageType::Read => {
                 response.body.payload = MessageType::ReadOk {
                     messages: self.messages.clone(),
                 };
             }
+            MessageType::ReadOk { messages } => {
+                self.messages.extend(messages);
+            }
             MessageType::Topology { topology } => {
-                self.neighbors = topology.get(&self.id).cloned().unwrap_or_default();
+                self.neighbors = topology
+                    .get(&self.id)
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .collect();
                 response.body.payload = MessageType::TopologyOk;
             }
             _ => return responses,
